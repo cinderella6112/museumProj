@@ -18,6 +18,8 @@ from zai import ZhipuAiClient
 
 load_dotenv()
 API_KEY = os.getenv("ZHIPUAI_API_KEY")
+API_MODEL_NAME = "glm-4.5-air"
+EMBEDDING_MODEL_NAME = "embedding-3"
 
 zhipu_client = ZhipuAiClient(api_key=API_KEY)
 chroma_client = chromadb.PersistentClient(path="./vector_db")
@@ -57,7 +59,7 @@ def rag_search(query: str) -> str:
     try:
         # 向量化查询语句
         response = zhipu_client.embeddings.create(
-            model="embedding-3",
+            model=EMBEDDING_MODEL_NAME,
             input=query
         )
         query_embedding = response.data[0].embedding
@@ -157,7 +159,7 @@ def call_zhipu_agent(state: State):
 
     # 调用原生智谱 API
     response = zhipu_client.chat.completions.create(
-        model="glm-4.5-air",
+        model=API_MODEL_NAME,
         messages=zhipu_msgs,
         tools=tools_schema
     )
@@ -225,7 +227,7 @@ def generate_suggestions(state: State):
 
     try:
         response = zhipu_client.chat.completions.create(
-            model="glm-4",
+            model=API_MODEL_NAME,
             messages=zhipu_msgs,
             response_format={"type": "json_object"}  # 强制返回标准 JSON
         )
