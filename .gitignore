@@ -12,6 +12,7 @@ frontend/dist/
 agents/__pycache__/
 agents/.venv/
 agents/**/__pycache__/
+agents/app/.env
 *.pyc
 .venv/
 
