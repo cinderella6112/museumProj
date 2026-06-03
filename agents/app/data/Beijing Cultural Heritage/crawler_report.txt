@@ -1,0 +1,7 @@
+爬虫执行报告
+执行时间: 2026-02-11 15:51:39
+起始URL: https://wwj.beijing.gov.cn/bjww/362771/362772/bjww_d61-12.html
+输出目录: d:\aispider\museum_data
+成功爬取: 93 个博物馆
+失败: 0 个博物馆
+总计: 93 个博物馆
