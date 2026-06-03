@@ -1,13 +1,9 @@
-"""
-省级博物馆推荐智能体（桩实现）。
+from agent import ask_museum_agent
 
-后续可在此接入大语言模型与知识库检索（RAG）。
-"""
-
-from __future__ import annotations
+# from __future__ import annotations
 
 # 各省示例博物馆与旅行提示（演示数据，可替换为知识库查询结果）
-PROVINCE_MUSEUMS: dict[str, list[str]] = {
+'''PROVINCE_MUSEUMS: dict[str, list[str]] = {
     "beijing": ["故宫博物院", "中国国家博物馆", "首都博物馆", "中国科技馆"],
     "shanghai": ["上海博物馆", "中华艺术宫", "上海自然博物馆"],
     "zhejiang": ["浙江省博物馆", "中国丝绸博物馆", "良渚博物院"],
@@ -16,11 +12,11 @@ PROVINCE_MUSEUMS: dict[str, list[str]] = {
     "guangdong": ["广东省博物馆", "南越王博物院", "深圳博物馆"],
 }
 
-DEFAULT_MUSEUMS = ["当地综合性博物馆", "省级博物馆", "专题博物馆（艺术/自然/历史）"]
+DEFAULT_MUSEUMS = ["当地综合性博物馆", "省级博物馆", "专题博物馆（艺术/自然/历史）"]'''
 
 
 def generate_reply(province_code: str, province_name: str, message: str) -> tuple[str, list[str]]:
-    museums = PROVINCE_MUSEUMS.get(province_code, DEFAULT_MUSEUMS)
+    '''museums = PROVINCE_MUSEUMS.get(province_code, DEFAULT_MUSEUMS)
     museum_list = "、".join(museums[:4])
 
     reply = (
@@ -39,4 +35,6 @@ def generate_reply(province_code: str, province_name: str, message: str) -> tupl
         "有哪些适合亲子游的博物馆？",
         "热门博物馆需要预约吗？",
     ]
-    return reply, suggestions
+    return reply, suggestions'''
+
+    return ask_museum_agent(message)

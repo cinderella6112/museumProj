@@ -125,6 +125,7 @@ tools_schema = [
 # 定义状态存储：记录所有的对话消息
 class State(TypedDict):
     messages: Annotated[list, add_messages]
+    suggestions: list[str]
 
 
 def call_zhipu_agent(state: State):
@@ -202,12 +203,56 @@ def execute_tools(state: State):
     return {"messages": results}
 
 
-def route_decision(state: State) -> Literal["tools", END]:
-    """条件路由：判断模型是否请求了工具调用"""
+def generate_suggestions(state: State):
+    """ Agent 完成全部回答后，触发此节点生成推荐的追问问题 """
+    messages = state["messages"]
+
+    # 将历史消息转换为智谱原生的 role/content 格式
+    zhipu_msgs = []
+    for msg in messages:
+        if isinstance(msg, HumanMessage):
+            zhipu_msgs.append({"role": "user", "content": msg.content})
+        elif isinstance(msg, AIMessage):
+            # 过滤掉中间过程的工具调用消息，只保留最终的文本回复内容
+            if msg.content:
+                zhipu_msgs.append({"role": "assistant", "content": msg.content})
+
+    # 尾部追加引导词，强力约束大模型仅输出符合特定场景的 JSON 数组
+    zhipu_msgs.append({
+        "role": "user",
+        "content": "请根据当前的对话上下文，预测用户接下来最可能想追问的 1~3 个相关问题。要求：问题必须非常简短、切中用户潜在需求。请直接返回一个 JSON 字符串数组，格式如：[\"问题1\", \"问题2\"]，不要包含任何 Markdown 格式标记（如 ```json）或额外解释。"
+    })
+
+    try:
+        response = zhipu_client.chat.completions.create(
+            model="glm-4",
+            messages=zhipu_msgs,
+            response_format={"type": "json_object"}  # 强制返回标准 JSON
+        )
+        res_content = response.choices[0].message.content
+        suggestions = json.loads(res_content)
+
+        # 兼容性处理：确保解析出来的是标准的 list 格式且不超过3个
+        if isinstance(suggestions, list):
+            return {"suggestions": suggestions[:3]}
+        elif isinstance(suggestions, dict):
+            # 防止模型擅自包裹了一层 key（如 {"questions": [...]}）
+            for key in ["suggestions", "questions", "data"]:
+                if key in suggestions and isinstance(suggestions[key], list):
+                    return {"suggestions": suggestions[key][:3]}
+    except Exception as e:
+        print(f"⚠️ 生成推荐问题时出错: {e}")
+
+    return {"suggestions": []}  # 出错时返回空列表降级
+
+
+def route_decision(state: State) -> Literal["tools", "generate_suggestions"]:
+    """条件路由：判断模型是否请求了工具调用，若无则流转到建议生成节点"""
     last_message = state["messages"][-1]
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
         return "tools"
-    return END
+
+    return "generate_suggestions"
 
 
 # 编译与运行 Graph、
@@ -219,30 +264,50 @@ workflow = StateGraph(State)
 workflow.add_node("agent", call_zhipu_agent)
 # noinspection PyTypeChecker
 workflow.add_node("tools", execute_tools)
+# noinspection PyTypeChecker
+workflow.add_node("generate_suggestions", generate_suggestions)
 
 # 设置边与路由
 workflow.add_edge(START, "agent")
 workflow.add_conditional_edges(
     "agent",
     route_decision,
-    {"tools": "tools", END: END}
+    {
+        "tools": "tools",
+        "generate_suggestions": "generate_suggestions"
+    }
 )
 workflow.add_edge("tools", "agent")
+workflow.add_edge("generate_suggestions", END)
 
 app = workflow.compile()
 
 
+def ask_museum_agent(user_query: str) -> tuple[str, list[str]]:
+    """封装对外的统一调用接口"""
+    # 启动图并获取最终的状态字典
+    final_state = app.invoke({"messages": [HumanMessage(content=user_query)]})
+
+    # 1. 提取模型最终返回的那个带有文本内容的 AIMessage
+    final_reply = ""
+    for msg in reversed(final_state["messages"]):
+        if isinstance(msg, AIMessage) and msg.content:
+            final_reply = msg.content
+            break
+
+    # 从状态机里直接取出 suggestions 列表
+    suggestions = final_state.get("suggestions", [])
+
+    return final_reply, suggestions
+
+
 if __name__ == "__main__":
-    print("🤖 博物馆智能体已启动！输入 'quit' 退出。")
+    print("输入 'quit' 退出。")
     while True:
         user_input = input("\n你: ")
         if user_input.lower() in ['quit', 'exit']:
             break
 
-        # 调用流式处理，便于观察调用轨迹
-        for event in app.stream({"messages": [HumanMessage(content=user_input)]}):
-            for node_name, node_state in event.items():
-                if node_name == "agent":
-                    msg = node_state["messages"][-1]
-                    if not msg.tool_calls:
-                        print(f"\n💡 智能体: {msg.content}")
+        reply, questions = ask_museum_agent(user_input)
+        print(f"\n💡 智能体回复: \n{reply}")
+        print(f"\n✨ 猜你想问: {questions}")
